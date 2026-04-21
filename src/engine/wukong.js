@@ -1552,7 +1552,7 @@ var Engine = function() {
       return alpha;
     }
 
-	// ====================== MCTS (AlphaGo-style) ======================
+// ====================== MCTS (AlphaGo-style) - FIXED FOR WUKONG ======================
 class MCTSNode {
   constructor(move = null, parent = null) {
     this.move = move;
@@ -1564,7 +1564,7 @@ class MCTSNode {
 }
 
 class MCTS {
-  constructor(timeLimit = 3000) {   // 3 seconds per move
+  constructor(timeLimit = 3000) {
     this.timeLimit = timeLimit;
   }
 
@@ -1576,7 +1576,7 @@ class MCTS {
       const path = [];
       let node = this._select(root, path);
 
-      // terminal position?
+      // if terminal position
       const legalMoves = generateLegalMoves();
       if (legalMoves.length === 0) {
         const value = this._evaluateTerminal();
@@ -1585,11 +1585,11 @@ class MCTS {
       }
 
       this._expand(node);
-      const value = evaluate();   // reuse your existing evaluation
+      const value = evaluate();           // reuse Wukong's evaluation
       this._backpropagate(node, value, path);
     }
 
-    // return best move by visits
+    // best move by most visits
     let bestChild = root.children[0];
     for (let child of root.children) {
       if (child.visits > bestChild.visits) bestChild = child;
@@ -1600,7 +1600,7 @@ class MCTS {
   _select(node, path) {
     while (node.children.length > 0) {
       node = this._getBestChild(node);
-      makeMove(node.move);        // move down the tree
+      makeMove(node.move);
       path.push(node.move);
     }
     return node;
@@ -1628,10 +1628,6 @@ class MCTS {
     }
   }
 
-  _simulate() {
-    return evaluate();
-  }
-
   _backpropagate(node, value, path) {
     while (node) {
       node.visits++;
@@ -1639,26 +1635,25 @@ class MCTS {
       node = node.parent;
       value = -value;
     }
-    // undo all moves we made during selection
+    // undo moves
     for (let i = path.length - 1; i >= 0; i--) {
       takeBack();
     }
   }
 
   _evaluateTerminal() {
-    const sideToMove = side;
-    if (isSquareAttacked(kingSquare[sideToMove], sideToMove ^ 1)) {
-      return -MATE_VALUE + searchPly;   // mate loss
+    if (isSquareAttacked(kingSquare[side], side ^ 1)) {
+      return -MATE_VALUE + searchPly;
     }
-    return 0;   // draw
+    return 0; // draw
   }
 }
 // ====================== END MCTS ======================
 	
     // search position for the best move (now using MCTS - AlphaGo style)
+// search position for the best move (MCTS - AlphaGo style)
 function searchPosition(depth) {
-  // depth is ignored - MCTS uses time instead (much stronger)
-  const mcts = new MCTS(3000);   // 3 seconds thinking time
+  const mcts = new MCTS(3000);   // 3 seconds for now
   let bestMove = mcts.getBestMove();
 
   console.log('bestmove ' + moveToString(bestMove));
