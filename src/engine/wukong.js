@@ -1551,80 +1551,119 @@ var Engine = function() {
 
       return alpha;
     }
-    
-    // search position for the best move
-    function searchPosition(depth) {
-      let start = Date.now();
-      let score = 0;
-      let lastBestMove = 0;
-      
-      clearSearch();
 
-      // iterative deepening
-      for (let currentDepth = 1; currentDepth <= depth; currentDepth++) {
-        lastBestMove = pvTable[0];
-        followPv = 1;
-        score = negamax(-INFINITY, INFINITY, currentDepth, DO_NULL);
-        
-        // stop searching if time is up
-        if (timing.stopped == 1 || 
-           ((Date.now() > timing.stopTime) &&
-            timing.time != -1)) break;
-        
-        let info = '';
-        
-        if (typeof(document) != 'undefined')
-          var uciScore = 0;
-        
-        if (score >= -MATE_VALUE && score <= -MATE_SCORE) {
-          info = 'info score mate ' + (parseInt(-(score + MATE_VALUE) / 2 - 1)) + 
-                 ' depth ' + currentDepth +
-                 ' nodes ' + nodes +
-                 ' time ' + (Date.now() - start) +
-                 ' pv ';
-                 
-          if (typeof(document) != 'undefined')
-            uciScore = 'M' + Math.abs((parseInt(-(score + MATE_VALUE) / 2 - 1)));
-        } else if (score >= MATE_SCORE && score <= MATE_VALUE) {
-          info = 'info score mate ' + (parseInt((MATE_VALUE - score) / 2 + 1)) + 
-                 ' depth ' + currentDepth +
-                 ' nodes ' + nodes +
-                 ' time ' + (Date.now() - start) +
-                 ' pv ';
-               
-          if (typeof(document) != 'undefined')
-            uciScore = 'M' + Math.abs((parseInt((MATE_VALUE - score) / 2 + 1)));
-        } else {
-          info = 'info score cp ' + score + 
-                 ' depth ' + currentDepth +
-                 ' nodes ' + nodes +
-                 ' time ' + (Date.now() - start) +
-                 ' pv ';
-          
-          if (typeof(document) != 'undefined')
-            uciScore = -score;
-        }
-        
-        for (let count = 0; count < pvLength[0]; count++)
-          info += moveToString(pvTable[count]) + ' ';
-                  
-        console.log(info);
-        
-        if (typeof(document) != 'undefined') {
-          if (uciScore == 49000) uciScore = 'M1';
-          guiScore = uciScore;
-          guiDepth = info.split('depth ')[1].split(' ')[0];
-          guiPv = info.split('pv ')[1];
-          guiTime = info.split('time ')[1].split(' ')[0];
-        }
-        
-        if (info.includes('mate') || info.includes('-49000')) break;
+	// ====================== MCTS (AlphaGo-style) ======================
+class MCTSNode {
+  constructor(move = null, parent = null) {
+    this.move = move;
+    this.parent = parent;
+    this.children = [];
+    this.visits = 0;
+    this.value = 0;
+  }
+}
+
+class MCTS {
+  constructor(timeLimit = 3000) {   // 3 seconds per move
+    this.timeLimit = timeLimit;
+  }
+
+  getBestMove() {
+    const root = new MCTSNode();
+    const startTime = Date.now();
+
+    while (Date.now() - startTime < this.timeLimit) {
+      const path = [];
+      let node = this._select(root, path);
+
+      // terminal position?
+      const legalMoves = generateLegalMoves();
+      if (legalMoves.length === 0) {
+        const value = this._evaluateTerminal();
+        this._backpropagate(node, value, path);
+        continue;
       }
 
-      let bestMove = (timing.stopped == 1) ? lastBestMove: pvTable[0];
-      console.log('bestmove ' + moveToString(bestMove));
-      return bestMove;
+      this._expand(node);
+      const value = evaluate();   // reuse your existing evaluation
+      this._backpropagate(node, value, path);
     }
+
+    // return best move by visits
+    let bestChild = root.children[0];
+    for (let child of root.children) {
+      if (child.visits > bestChild.visits) bestChild = child;
+    }
+    return bestChild.move;
+  }
+
+  _select(node, path) {
+    while (node.children.length > 0) {
+      node = this._getBestChild(node);
+      makeMove(node.move);        // move down the tree
+      path.push(node.move);
+    }
+    return node;
+  }
+
+  _getBestChild(node) {
+    let best = node.children[0];
+    let bestScore = -Infinity;
+    for (let child of node.children) {
+      const score = (child.value / (child.visits || 1)) +
+                    1.4 * Math.sqrt(Math.log(node.visits + 1) / (child.visits + 1));
+      if (score > bestScore) {
+        bestScore = score;
+        best = child;
+      }
+    }
+    return best;
+  }
+
+  _expand(node) {
+    const moveList = generateLegalMoves();
+    for (let i = 0; i < moveList.length; i++) {
+      const child = new MCTSNode(moveList[i].move, node);
+      node.children.push(child);
+    }
+  }
+
+  _simulate() {
+    return evaluate();
+  }
+
+  _backpropagate(node, value, path) {
+    while (node) {
+      node.visits++;
+      node.value += value;
+      node = node.parent;
+      value = -value;
+    }
+    // undo all moves we made during selection
+    for (let i = path.length - 1; i >= 0; i--) {
+      takeBack();
+    }
+  }
+
+  _evaluateTerminal() {
+    const sideToMove = side;
+    if (isSquareAttacked(kingSquare[sideToMove], sideToMove ^ 1)) {
+      return -MATE_VALUE + searchPly;   // mate loss
+    }
+    return 0;   // draw
+  }
+}
+// ====================== END MCTS ======================
+	
+    // search position for the best move (now using MCTS - AlphaGo style)
+function searchPosition(depth) {
+  // depth is ignored - MCTS uses time instead (much stronger)
+  const mcts = new MCTS(3000);   // 3 seconds thinking time
+  let bestMove = mcts.getBestMove();
+
+  console.log('bestmove ' + moveToString(bestMove));
+  return bestMove;
+}
 
 
     /****************************\
